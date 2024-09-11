@@ -3,8 +3,9 @@ import sqlite3
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTableView, QDialog, QFormLayout, \
     QLineEdit, QDateEdit, QComboBox, QHBoxLayout, QLabel, QStyledItemDelegate, QMessageBox
 from PyQt5.QtCore import Qt, QDate, QModelIndex
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QFont, QPainter
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QFont
 
+# Funzione per creare il database
 def create_database():
     conn = sqlite3.connect("studenti.db")
     cursor = conn.cursor()
@@ -32,6 +33,44 @@ def create_database():
     ''')
     conn.commit()
     conn.close()
+
+class MonthDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(MonthDelegate, self).__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        editor = QComboBox(parent)
+        editor.addItems(["No", "Sì"])
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.data(Qt.DisplayRole)
+        editor.setCurrentIndex(1 if value == "Sì" else 0)  # Imposta l'editor per "Sì" o "No"
+
+    def setModelData(self, editor, model, index):
+        value = editor.currentText()
+        model.setData(index, value, Qt.EditRole)
+
+        # Aggiorna il valore nel database
+        row = index.row()
+        col = index.column()
+        student_id = model.data(model.index(row, 0))  # Ottieni l'ID dello studente
+        self.update_database(student_id, col, 1 if value == "Sì" else 0)
+
+    def update_database(self, student_id, month_column, value):
+        month_columns = ["settembre", "ottobre", "novembre", "dicembre", "gennaio",
+                         "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto"]
+
+        month_name = month_columns[month_column - 6]  # Le colonne 6-17 corrispondono ai mesi
+
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        query = f"UPDATE Studenti SET {month_name} = ? WHERE id = ?"
+        cursor.execute(query, (value, student_id))
+        conn.commit()
+        conn.close()
+
+
 
 class ButtonDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -85,8 +124,7 @@ class MainWindow(QWidget):
         self.view = QTableView(self)
         self.view.setModel(self.model)
         self.view.setSelectionBehavior(QTableView.SelectItems)
-        self.view.setSelectionMode(QTableView.NoSelection)
-        self.view.setEditTriggers(QTableView.NoEditTriggers)
+        self.view.setEditTriggers(QTableView.DoubleClicked | QTableView.SelectedClicked)
         self.view.setSortingEnabled(True)
 
         font = QFont("Arial", 15)
@@ -98,7 +136,12 @@ class MainWindow(QWidget):
         for i, width in enumerate(column_widths):
             self.view.setColumnWidth(i, width)
 
-        self.view.setItemDelegateForColumn(18, ButtonDelegate(self))  # Delegato per colonna Azioni
+        # Delegato per i mesi
+        for col in range(6, 18):
+            self.view.setItemDelegateForColumn(col, MonthDelegate(self))
+
+        # Delegato per la colonna azioni
+        self.view.setItemDelegateForColumn(18, ButtonDelegate(self))
 
         self.layout.addWidget(self.view)
 
@@ -122,6 +165,11 @@ class MainWindow(QWidget):
 
         self.model.setRowCount(0)  # Clear existing rows
         for row in rows:
+            row = list(row)  # Convert to a mutable list
+            row[4] = "Sì" if row[4] == 1 else "No"  # Convert 1 to 'Sì' and 0 to 'No'
+            for i in range(6, 18):
+                row[i] = "Sì" if row[i] == 1 else "No"  # Convert 1 to 'Sì' and 0 to 'No'
+
             items = [QStandardItem(str(field)) for field in row]
             items.append(QStandardItem())  # Colonna Azioni
             self.model.appendRow(items)
@@ -205,10 +253,16 @@ class AddStudentDialog(QDialog):
         self.accept()
 
 if __name__ == "__main__":
-    create_database()
+    try:
+        create_database()
 
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
 
-    sys.exit(app.exec_())
+        sys.exit(app.exec_())
+    except Exception as e:
+        print(f"Si è verificato un errore: {e}")
+
+
+
