@@ -167,8 +167,15 @@ class MainWindow(QWidget):
         for row in rows:
             row = list(row)  # Convert to a mutable list
             row[4] = "Sì" if row[4] == 1 else "No"  # Convert 1 to 'Sì' and 0 to 'No'
+
+            # Aggiungi il simbolo dell'euro al valore del costo
+            row[5] = f"€ {row[5]:.2f}"  # Formatta il costo con il simbolo dell'euro e due decimali
+
+            # Modifica per formattare la data come giorno-mese-anno
+            row[3] = QDate.fromString(row[3], "yyyy-MM-dd").toString("dd/MM/yyyy")
+
             for i in range(6, 18):
-                row[i] = "Sì" if row[i] == 1 else "No"  # Convert 1 to 'Sì' and 0 to 'No'
+                row[i] = "Sì" if row[i] == 1 else "No"  # Converti 1 a 'Sì' e 0 a 'No'
 
             items = [QStandardItem(str(field)) for field in row]
             items.append(QStandardItem())  # Colonna Azioni
@@ -258,7 +265,7 @@ if __name__ == "__main__":
 
         app = QApplication(sys.argv)
         window = MainWindow()
-        window.show()
+        window.showMaximized()
 
         sys.exit(app.exec_())
     except Exception as e:
