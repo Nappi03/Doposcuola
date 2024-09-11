@@ -1,12 +1,12 @@
 import sys
 import sqlite3
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTableView, QDialog, QFormLayout, \
-    QLineEdit, QDateEdit, QComboBox, QMessageBox, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableView, QDialog, QFormLayout, \
+    QLineEdit, QDateEdit, QComboBox, QMessageBox, QHBoxLayout, QLabel, QPushButton, QStyledItemDelegate, QStyle, \
+    QStyleOptionButton
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QStyledItemDelegate
-from PyQt5.QtCore import QDate
+
 
 def create_database():
     conn = sqlite3.connect("studenti.db")
@@ -19,7 +19,19 @@ def create_database():
         Classe TEXT NOT NULL,
         Data_Inizio DATE NOT NULL,
         Anticipato BOOLEAN DEFAULT 0,
-        Costo REAL NOT NULL
+        Costo REAL NOT NULL,
+        settembre BOOLEAN DEFAULT 0,
+        ottobre BOOLEAN DEFAULT 0,
+        novembre BOOLEAN DEFAULT 0,
+        dicembre BOOLEAN DEFAULT 0,
+        gennaio BOOLEAN DEFAULT 0,
+        febbraio BOOLEAN DEFAULT 0,
+        marzo BOOLEAN DEFAULT 0,
+        aprile BOOLEAN DEFAULT 0,
+        maggio BOOLEAN DEFAULT 0,
+        giugno BOOLEAN DEFAULT 0,
+        luglio BOOLEAN DEFAULT 0,
+        agosto BOOLEAN DEFAULT 0
     )
     ''')
 
@@ -36,7 +48,6 @@ class BoolDelegate(QStyledItemDelegate):
         return super().displayText(value, locale)
 
 
-
 class CustomSqlTableModel(QSqlTableModel):
     def data(self, index, role=Qt.DisplayRole):
         if index.column() == 3 and role == Qt.DisplayRole:  # Colonna della data
@@ -45,7 +56,6 @@ class CustomSqlTableModel(QSqlTableModel):
                 date = QDate.fromString(date_value, "yyyy-MM-dd")
                 return date.toString("dd-MM-yyyy")  # Formato giorno-mese-anno
         return super().data(index, role)
-
 
 
 class AddStudentDialog(QDialog):
@@ -122,12 +132,35 @@ class AddStudentDialog(QDialog):
         self.accept()
 
 
+class ButtonDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None, delete_function=None):
+        super(ButtonDelegate, self).__init__(parent)
+        self.delete_function = delete_function
+
+    def paint(self, painter, option, index):
+        # Crea il pulsante nella cella
+        button = QStyleOptionButton()
+        button.rect = option.rect
+        button.text = "Elimina"
+        button.state = QStyle.State_Enabled
+
+        # Disegna il pulsante
+        QApplication.style().drawControl(QStyle.CE_PushButton, button, painter)
+
+    def editorEvent(self, event, model, option, index):
+        # Rileva il click del mouse sul pulsante
+        if event.type() == event.MouseButtonRelease:
+            # Chiamare la funzione di cancellazione
+            self.delete_function(index.row())
+        return True  # Assicura che l'evento venga gestito
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super(MainWindow, self).__init__()
 
         self.setWindowTitle("Studenti")
-        self.setGeometry(100, 100, 1100, 500)
+        self.setGeometry(100, 100, 1200, 500)
 
         self.layout = QVBoxLayout(self)
 
@@ -135,7 +168,6 @@ class MainWindow(QWidget):
         self.db.setDatabaseName("studenti.db")
         self.db.open()
 
-        # Usa il modello personalizzato
         self.model = CustomSqlTableModel(self)
         self.model.setTable("Studenti")
         self.model.select()
@@ -146,10 +178,23 @@ class MainWindow(QWidget):
         self.model.setHeaderData(3, Qt.Horizontal, "Data Inizio")
         self.model.setHeaderData(4, Qt.Horizontal, "Anticipato")
         self.model.setHeaderData(5, Qt.Horizontal, "Costo")
+        self.model.setHeaderData(6, Qt.Horizontal, "Settembre")
+        self.model.setHeaderData(7, Qt.Horizontal, "Ottobre")
+        self.model.setHeaderData(8, Qt.Horizontal, "Novembre")
+        self.model.setHeaderData(9, Qt.Horizontal, "Dicembre")
+        self.model.setHeaderData(10, Qt.Horizontal, "Gennaio")
+        self.model.setHeaderData(11, Qt.Horizontal, "Febbraio")
+        self.model.setHeaderData(12, Qt.Horizontal, "Marzo")
+        self.model.setHeaderData(13, Qt.Horizontal, "Aprile")
+        self.model.setHeaderData(14, Qt.Horizontal, "Maggio")
+        self.model.setHeaderData(15, Qt.Horizontal, "Giugno")
+        self.model.setHeaderData(16, Qt.Horizontal, "Luglio")
+        self.model.setHeaderData(17, Qt.Horizontal, "Agosto")
+        self.model.setHeaderData(18, Qt.Horizontal, "Azione")
 
         self.view = QTableView(self)
         self.view.setModel(self.model)
-        self.view.setSelectionBehavior(QTableView.SelectRows)
+        self.view.setSelectionMode(QTableView.NoSelection)  # Rende non selezionabili le righe
         self.view.setEditTriggers(QTableView.NoEditTriggers)
         self.view.setSortingEnabled(True)
 
@@ -157,8 +202,7 @@ class MainWindow(QWidget):
         self.view.setFont(font)
         self.view.horizontalHeader().setFont(QFont("Arial", 15))
 
-        # Nascondi la colonna ID (indice 0)
-        self.view.hideColumn(0)
+        self.view.hideColumn(0)  # Nasconde la colonna ID (indice 0)
 
         # Imposta le larghezze delle colonne
         self.view.setColumnWidth(1, 350)
@@ -166,55 +210,55 @@ class MainWindow(QWidget):
         self.view.setColumnWidth(3, 150)
         self.view.setColumnWidth(4, 120)
         self.view.setColumnWidth(5, 100)
+        self.view.setColumnWidth(6, 100)
+        self.view.setColumnWidth(7, 100)
+        self.view.setColumnWidth(8, 100)
+        self.view.setColumnWidth(9, 100)
+        self.view.setColumnWidth(10, 100)
+        self.view.setColumnWidth(11, 100)
+        self.view.setColumnWidth(12, 80)
+        self.view.setColumnWidth(13, 80)
+        self.view.setColumnWidth(14, 80)
+        self.view.setColumnWidth(15, 80)
+        self.view.setColumnWidth(16, 80)
+        self.view.setColumnWidth(17, 80)
+        self.view.setColumnWidth(18, 100)
 
-        # Applica il delegato BoolDelegate alla colonna "Anticipato" (indice 4)
+        # Imposta delegati per le colonne booleane
         self.view.setItemDelegateForColumn(4, BoolDelegate(self))
+        for col in range(6, 18):
+            self.view.setItemDelegateForColumn(col, BoolDelegate(self))
+
+        # Imposta il delegate per il pulsante di eliminazione nella colonna "Azione"
+        self.view.setItemDelegateForColumn(18, ButtonDelegate(self, self.delete_student))
 
         self.layout.addWidget(self.view)
 
-        self.button_layout = QHBoxLayout()
-
         self.add_button = QPushButton("Aggiungi Studente", self)
-        self.add_button.setFont(QFont("Arial", 14))
-        self.add_button.clicked.connect(self.open_add_dialog)
+        self.add_button.setFont(QFont("Arial", 15))
+        self.add_button.clicked.connect(self.open_add_student_dialog)
 
-        self.button_layout.addWidget(self.add_button)
+        self.layout.addWidget(self.add_button)
 
-        self.delete_button = QPushButton("Elimina Studente Selezionato", self)
-        self.delete_button.setFont(QFont("Arial", 14))
-        self.delete_button.clicked.connect(self.delete_student)
-
-        self.button_layout.addWidget(self.delete_button)
-
-        self.layout.addLayout(self.button_layout)
-
-    def open_add_dialog(self):
+    def open_add_student_dialog(self):
         dialog = AddStudentDialog(self)
         if dialog.exec_() == QDialog.Accepted:
-            self.model.select()
+            self.model.select()  # Aggiorna la tabella dopo l'inserimento di un nuovo studente
 
-    def delete_student(self):
-        selected_row = self.view.currentIndex().row()
-        if selected_row < 0:
-            QMessageBox.warning(self, "Errore", "Seleziona una riga per eliminare uno studente")
-            return
+    def delete_student(self, row):
+        reply = QMessageBox.question(self, "Conferma Cancellazione",
+                                     "Sei sicuro di voler eliminare questo studente?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
-        confirm = QMessageBox.question(self, "Conferma", "Sei sicuro di voler eliminare questo studente?",
-                                       QMessageBox.Yes | QMessageBox.No)
-
-        if confirm == QMessageBox.Yes:
-            self.model.removeRow(selected_row)
-            self.model.submitAll()
-            self.model.select()
+        if reply == QMessageBox.Yes:
+            self.model.removeRow(row)
+            self.model.select()  # Ricarica i dati aggiornati
 
 
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     create_database()
 
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-
     sys.exit(app.exec_())
