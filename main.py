@@ -1,17 +1,13 @@
 import sys
 import sqlite3
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableView, QDialog, QFormLayout, \
-    QLineEdit, QDateEdit, QComboBox, QMessageBox, QHBoxLayout, QLabel, QPushButton, QStyledItemDelegate, QStyle, \
-    QStyleOptionButton
-from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
-
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTableView, QDialog, QFormLayout, \
+    QLineEdit, QDateEdit, QComboBox, QHBoxLayout, QLabel, QStyledItemDelegate, QMessageBox
+from PyQt5.QtCore import Qt, QDate, QModelIndex
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QFont, QPainter
 
 def create_database():
     conn = sqlite3.connect("studenti.db")
     cursor = conn.cursor()
-
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Studenti (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,29 +30,106 @@ def create_database():
         agosto BOOLEAN DEFAULT 0
     )
     ''')
-
     conn.commit()
     conn.close()
 
+class ButtonDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(ButtonDelegate, self).__init__(parent)
 
-class BoolDelegate(QStyledItemDelegate):
-    def displayText(self, value, locale):
-        if value == 1:
-            return "Sì"
-        elif value == 0:
-            return "No"
-        return super().displayText(value, locale)
+    def paint(self, painter, option, index):
+        if index.column() == 18:  # Colonna del bottone di eliminazione
+            button_rect = option.rect
+            painter.save()
+            painter.setBrush(Qt.red)
+            painter.drawRect(button_rect)
+            painter.setPen(Qt.white)
+            painter.drawText(button_rect, Qt.AlignCenter, "Elimina")
+            painter.restore()
+        else:
+            super().paint(painter, option, index)
 
+    def editorEvent(self, event, model, option, index):
+        if index.column() == 18 and event.type() == event.MouseButtonRelease:
+            # Trova l'ID dello studente nella riga selezionata
+            student_id = model.data(model.index(index.row(), 0))
+            if student_id:
+                self.delete_student(student_id)
+                model.removeRow(index.row())
+        return super().editorEvent(event, model, option, index)
 
-class CustomSqlTableModel(QSqlTableModel):
-    def data(self, index, role=Qt.DisplayRole):
-        if index.column() == 3 and role == Qt.DisplayRole:  # Colonna della data
-            date_value = super().data(index, role)
-            if date_value:
-                date = QDate.fromString(date_value, "yyyy-MM-dd")
-                return date.toString("dd-MM-yyyy")  # Formato giorno-mese-anno
-        return super().data(index, role)
+    def delete_student(self, student_id):
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Studenti WHERE id = ?", (student_id,))
+        conn.commit()
+        conn.close()
 
+class MainWindow(QWidget):
+    def __init__(self):
+        super(MainWindow, self).__init__()
+
+        self.setWindowTitle("Studenti")
+        self.setGeometry(100, 100, 1300, 500)
+
+        self.layout = QVBoxLayout(self)
+
+        # Usa QStandardItemModel
+        self.model = QStandardItemModel(0, 19)  # 18 colonne dati + 1 colonna azioni
+        self.model.setHorizontalHeaderLabels([
+            "ID", "Nome e Cognome", "Classe", "Data Inizio", "Anticipato", "Costo",
+            "Settembre", "Ottobre", "Novembre", "Dicembre", "Gennaio", "Febbraio",
+            "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Azioni"
+        ])
+
+        self.view = QTableView(self)
+        self.view.setModel(self.model)
+        self.view.setSelectionBehavior(QTableView.SelectItems)
+        self.view.setSelectionMode(QTableView.NoSelection)
+        self.view.setEditTriggers(QTableView.NoEditTriggers)
+        self.view.setSortingEnabled(True)
+
+        font = QFont("Arial", 15)
+        self.view.setFont(font)
+        self.view.horizontalHeader().setFont(QFont("Arial", 15))
+
+        # Imposta le larghezze delle colonne
+        column_widths = [0, 300, 150, 150, 120, 100, 100, 100, 100, 100, 90, 90, 80, 80, 80, 80, 80, 80, 100]
+        for i, width in enumerate(column_widths):
+            self.view.setColumnWidth(i, width)
+
+        self.view.setItemDelegateForColumn(18, ButtonDelegate(self))  # Delegato per colonna Azioni
+
+        self.layout.addWidget(self.view)
+
+        self.button_layout = QHBoxLayout()
+
+        self.add_button = QPushButton("Aggiungi Studente", self)
+        self.add_button.setFont(QFont("Arial", 14))
+        self.add_button.clicked.connect(self.open_add_dialog)
+
+        self.button_layout.addWidget(self.add_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.load_data()
+
+    def load_data(self):
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Studenti")
+        rows = cursor.fetchall()
+        conn.close()
+
+        self.model.setRowCount(0)  # Clear existing rows
+        for row in rows:
+            items = [QStandardItem(str(field)) for field in row]
+            items.append(QStandardItem())  # Colonna Azioni
+            self.model.appendRow(items)
+
+    def open_add_dialog(self):
+        dialog = AddStudentDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_data()
 
 class AddStudentDialog(QDialog):
     def __init__(self, parent=None):
@@ -131,134 +204,11 @@ class AddStudentDialog(QDialog):
 
         self.accept()
 
-
-class ButtonDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None, delete_function=None):
-        super(ButtonDelegate, self).__init__(parent)
-        self.delete_function = delete_function
-
-    def paint(self, painter, option, index):
-        # Crea il pulsante nella cella
-        button = QStyleOptionButton()
-        button.rect = option.rect
-        button.text = "Elimina"
-        button.state = QStyle.State_Enabled
-
-        # Disegna il pulsante
-        QApplication.style().drawControl(QStyle.CE_PushButton, button, painter)
-
-    def editorEvent(self, event, model, option, index):
-        # Rileva il click del mouse sul pulsante
-        if event.type() == event.MouseButtonRelease:
-            # Chiamare la funzione di cancellazione
-            self.delete_function(index.row())
-        return True  # Assicura che l'evento venga gestito
-
-
-class MainWindow(QWidget):
-    def __init__(self):
-        super(MainWindow, self).__init__()
-
-        self.setWindowTitle("Studenti")
-        self.setGeometry(100, 100, 1200, 500)
-
-        self.layout = QVBoxLayout(self)
-
-        self.db = QSqlDatabase.addDatabase("QSQLITE")
-        self.db.setDatabaseName("studenti.db")
-        self.db.open()
-
-        self.model = CustomSqlTableModel(self)
-        self.model.setTable("Studenti")
-        self.model.select()
-
-        # Personalizza le intestazioni
-        self.model.setHeaderData(1, Qt.Horizontal, "Nome e Cognome")
-        self.model.setHeaderData(2, Qt.Horizontal, "Classe")
-        self.model.setHeaderData(3, Qt.Horizontal, "Data Inizio")
-        self.model.setHeaderData(4, Qt.Horizontal, "Anticipato")
-        self.model.setHeaderData(5, Qt.Horizontal, "Costo")
-        self.model.setHeaderData(6, Qt.Horizontal, "Settembre")
-        self.model.setHeaderData(7, Qt.Horizontal, "Ottobre")
-        self.model.setHeaderData(8, Qt.Horizontal, "Novembre")
-        self.model.setHeaderData(9, Qt.Horizontal, "Dicembre")
-        self.model.setHeaderData(10, Qt.Horizontal, "Gennaio")
-        self.model.setHeaderData(11, Qt.Horizontal, "Febbraio")
-        self.model.setHeaderData(12, Qt.Horizontal, "Marzo")
-        self.model.setHeaderData(13, Qt.Horizontal, "Aprile")
-        self.model.setHeaderData(14, Qt.Horizontal, "Maggio")
-        self.model.setHeaderData(15, Qt.Horizontal, "Giugno")
-        self.model.setHeaderData(16, Qt.Horizontal, "Luglio")
-        self.model.setHeaderData(17, Qt.Horizontal, "Agosto")
-        self.model.setHeaderData(18, Qt.Horizontal, "Azione")
-
-        self.view = QTableView(self)
-        self.view.setModel(self.model)
-        self.view.setSelectionMode(QTableView.NoSelection)  # Rende non selezionabili le righe
-        self.view.setEditTriggers(QTableView.NoEditTriggers)
-        self.view.setSortingEnabled(True)
-
-        font = QFont("Arial", 15)
-        self.view.setFont(font)
-        self.view.horizontalHeader().setFont(QFont("Arial", 15))
-
-        self.view.hideColumn(0)  # Nasconde la colonna ID (indice 0)
-
-        # Imposta le larghezze delle colonne
-        self.view.setColumnWidth(1, 350)
-        self.view.setColumnWidth(2, 200)
-        self.view.setColumnWidth(3, 150)
-        self.view.setColumnWidth(4, 120)
-        self.view.setColumnWidth(5, 100)
-        self.view.setColumnWidth(6, 100)
-        self.view.setColumnWidth(7, 100)
-        self.view.setColumnWidth(8, 100)
-        self.view.setColumnWidth(9, 100)
-        self.view.setColumnWidth(10, 100)
-        self.view.setColumnWidth(11, 100)
-        self.view.setColumnWidth(12, 80)
-        self.view.setColumnWidth(13, 80)
-        self.view.setColumnWidth(14, 80)
-        self.view.setColumnWidth(15, 80)
-        self.view.setColumnWidth(16, 80)
-        self.view.setColumnWidth(17, 80)
-        self.view.setColumnWidth(18, 100)
-
-        # Imposta delegati per le colonne booleane
-        self.view.setItemDelegateForColumn(4, BoolDelegate(self))
-        for col in range(6, 18):
-            self.view.setItemDelegateForColumn(col, BoolDelegate(self))
-
-        # Imposta il delegate per il pulsante di eliminazione nella colonna "Azione"
-        self.view.setItemDelegateForColumn(18, ButtonDelegate(self, self.delete_student))
-
-        self.layout.addWidget(self.view)
-
-        self.add_button = QPushButton("Aggiungi Studente", self)
-        self.add_button.setFont(QFont("Arial", 15))
-        self.add_button.clicked.connect(self.open_add_student_dialog)
-
-        self.layout.addWidget(self.add_button)
-
-    def open_add_student_dialog(self):
-        dialog = AddStudentDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            self.model.select()  # Aggiorna la tabella dopo l'inserimento di un nuovo studente
-
-    def delete_student(self, row):
-        reply = QMessageBox.question(self, "Conferma Cancellazione",
-                                     "Sei sicuro di voler eliminare questo studente?",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-        if reply == QMessageBox.Yes:
-            self.model.removeRow(row)
-            self.model.select()  # Ricarica i dati aggiornati
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     create_database()
 
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
+
     sys.exit(app.exec_())
