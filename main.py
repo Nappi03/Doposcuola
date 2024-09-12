@@ -70,6 +70,111 @@ class MonthDelegate(QStyledItemDelegate):
         conn.commit()
         conn.close()
 
+class ClassDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(ClassDelegate, self).__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        # Usa un QLineEdit per modificare la classe
+        editor = QLineEdit(parent)
+        return editor
+
+    def setEditorData(self, editor, index):
+        # Imposta il valore attuale della classe nell'editor
+        value = index.data(Qt.DisplayRole)
+        editor.setText(value)
+
+    def setModelData(self, editor, model, index):
+        # Ottieni il nuovo valore dall'editor e aggiorna il modello
+        value = editor.text().strip()
+        model.setData(index, value, Qt.EditRole)
+
+        # Aggiorna il valore nel database
+        row = index.row()
+        student_id = model.data(model.index(row, 0))  # Ottieni l'ID dello studente
+        self.update_database(student_id, value)
+
+    def update_database(self, student_id, new_class):
+        # Aggiorna il campo "Classe" nel database
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        query = "UPDATE Studenti SET Classe = ? WHERE id = ?"
+        cursor.execute(query, (new_class, student_id))
+        conn.commit()
+        conn.close()
+
+
+class AnticipatoDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(AnticipatoDelegate, self).__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        editor = QComboBox(parent)
+        editor.addItems(["No", "Sì"])
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.data(Qt.DisplayRole)
+        editor.setCurrentIndex(1 if value == "Sì" else 0)  # Imposta "Sì" o "No"
+
+    def setModelData(self, editor, model, index):
+        value = editor.currentText()
+        model.setData(index, value, Qt.EditRole)
+
+        # Aggiorna il valore nel database
+        row = index.row()
+        student_id = model.data(model.index(row, 0))  # Ottieni l'ID dello studente
+        self.update_database(student_id, 1 if value == "Sì" else 0)
+
+    def update_database(self, student_id, anticipato_value):
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        query = "UPDATE Studenti SET Anticipato = ? WHERE id = ?"
+        cursor.execute(query, (anticipato_value, student_id))
+        conn.commit()
+        conn.close()
+
+
+class CostDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(CostDelegate, self).__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        # Usa un QLineEdit per permettere la modifica del costo
+        editor = QLineEdit(parent)
+        return editor
+
+    def setEditorData(self, editor, index):
+        # Imposta il valore attuale nell'editor
+        value = index.data(Qt.DisplayRole)
+        value = value.replace('€ ', '')  # Rimuovi il simbolo dell'euro per l'editing
+        editor.setText(value)
+
+    def setModelData(self, editor, model, index):
+        # Ottieni il nuovo valore dall'editor
+        value = editor.text().replace(',', '.').strip()  # Rimuovi eventuali spazi bianchi e correggi i decimali
+        try:
+            value_float = float(value)  # Verifica che sia un numero valido
+        except ValueError:
+            QMessageBox.warning(None, "Errore", "Il costo inserito non è valido!")
+            return
+
+        # Formatta il valore come euro e aggiornalo nel modello
+        formatted_value = f"€ {value_float:.2f}"
+        model.setData(index, formatted_value, Qt.EditRole)
+
+        # Aggiorna il valore nel database
+        row = index.row()
+        student_id = model.data(model.index(row, 0))  # Ottieni l'ID dello studente
+        self.update_database(student_id, value_float)
+
+    def update_database(self, student_id, new_cost):
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+        query = "UPDATE Studenti SET Costo = ? WHERE id = ?"
+        cursor.execute(query, (new_cost, student_id))
+        conn.commit()
+        conn.close()
 
 
 class ButtonDelegate(QStyledItemDelegate):
@@ -127,12 +232,12 @@ class MainWindow(QWidget):
         self.view.setEditTriggers(QTableView.DoubleClicked | QTableView.SelectedClicked)
         self.view.setSortingEnabled(True)
 
-        font = QFont("Arial", 15)
+        font = QFont("Arial", 12)
         self.view.setFont(font)
-        self.view.horizontalHeader().setFont(QFont("Arial", 15))
+        self.view.horizontalHeader().setFont(QFont("Arial", 12))
 
         # Imposta le larghezze delle colonne
-        column_widths = [0, 300, 150, 150, 120, 100, 100, 100, 100, 100, 90, 90, 80, 80, 80, 80, 80, 80, 100]
+        column_widths = [0, 250, 120, 120, 100, 90, 90, 90, 90, 90, 80, 80, 80, 80, 80, 80, 80, 80, 80]
         for i, width in enumerate(column_widths):
             self.view.setColumnWidth(i, width)
 
@@ -143,12 +248,21 @@ class MainWindow(QWidget):
         # Delegato per la colonna azioni
         self.view.setItemDelegateForColumn(18, ButtonDelegate(self))
 
+        # Delegato per la colonna del costo (colonna 5)
+        self.view.setItemDelegateForColumn(5, CostDelegate(self))
+
+        # Delegato per la colonna della classe (colonna 2)
+        self.view.setItemDelegateForColumn(2, ClassDelegate(self))
+
+        # Delegato per la colonna anticipato (colonna 4)
+        self.view.setItemDelegateForColumn(4, AnticipatoDelegate(self))
+
         self.layout.addWidget(self.view)
 
         self.button_layout = QHBoxLayout()
 
         self.add_button = QPushButton("Aggiungi Studente", self)
-        self.add_button.setFont(QFont("Arial", 14))
+        self.add_button.setFont(QFont("Arial", 12))
         self.add_button.clicked.connect(self.open_add_dialog)
 
         self.button_layout.addWidget(self.add_button)
@@ -195,8 +309,8 @@ class AddStudentDialog(QDialog):
 
         self.layout = QFormLayout(self)
 
-        font = QFont("Arial", 15)
-        label_font = QFont("Arial", 15)
+        font = QFont("Arial", 12)
+        label_font = QFont("Arial", 12)
 
         self.nominativo_label = QLabel("Nominativo:", self)
         self.nominativo_label.setFont(label_font)
