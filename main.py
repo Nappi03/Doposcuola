@@ -1,9 +1,10 @@
 import sys
 import sqlite3
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTableView, QDialog, QFormLayout, \
-    QLineEdit, QDateEdit, QComboBox, QHBoxLayout, QLabel, QStyledItemDelegate, QMessageBox
+    QLineEdit, QDateEdit, QComboBox, QHBoxLayout, QLabel, QStyledItemDelegate, QMessageBox, QTabWidget
 from PyQt5.QtCore import Qt, QDate, QModelIndex
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QFont
+
 
 # Funzione per creare il database
 def create_database():
@@ -33,6 +34,7 @@ def create_database():
     ''')
     conn.commit()
     conn.close()
+
 
 class MonthDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -69,6 +71,7 @@ class MonthDelegate(QStyledItemDelegate):
         cursor.execute(query, (value, student_id))
         conn.commit()
         conn.close()
+
 
 class ClassDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -209,6 +212,7 @@ class ButtonDelegate(QStyledItemDelegate):
         conn.commit()
         conn.close()
 
+
 class MainWindow(QWidget):
     def __init__(self):
         super(MainWindow, self).__init__()
@@ -217,6 +221,13 @@ class MainWindow(QWidget):
         self.setGeometry(100, 100, 1300, 500)
 
         self.layout = QVBoxLayout(self)
+
+        # Crea il QTabWidget
+        self.tabs = QTabWidget()
+
+        # Tab per la tabella degli studenti
+        self.student_tab = QWidget()
+        self.student_tab_layout = QVBoxLayout(self.student_tab)
 
         # Usa QStandardItemModel
         self.model = QStandardItemModel(0, 19)  # 18 colonne dati + 1 colonna azioni
@@ -257,16 +268,23 @@ class MainWindow(QWidget):
         # Delegato per la colonna anticipato (colonna 4)
         self.view.setItemDelegateForColumn(4, AnticipatoDelegate(self))
 
-        self.layout.addWidget(self.view)
+        self.student_tab_layout.addWidget(self.view)
 
         self.button_layout = QHBoxLayout()
-
         self.add_button = QPushButton("Aggiungi Studente", self)
         self.add_button.setFont(QFont("Arial", 12))
         self.add_button.clicked.connect(self.open_add_dialog)
-
         self.button_layout.addWidget(self.add_button)
-        self.layout.addLayout(self.button_layout)
+        self.student_tab_layout.addLayout(self.button_layout)
+
+        # Aggiungi la scheda con la tabella al QTabWidget
+        self.tabs.addTab(self.student_tab, "Studenti")
+
+        # Scheda economia
+        self.economy_tab = EconomyTab()
+        self.tabs.addTab(self.economy_tab, "Economia")
+
+        self.layout.addWidget(self.tabs)
 
         self.load_data()
 
@@ -299,6 +317,7 @@ class MainWindow(QWidget):
         dialog = AddStudentDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             self.load_data()
+
 
 class AddStudentDialog(QDialog):
     def __init__(self, parent=None):
@@ -373,9 +392,71 @@ class AddStudentDialog(QDialog):
 
         self.accept()
 
+
+class EconomyTab(QWidget):
+    def __init__(self, parent=None):
+        super(EconomyTab, self).__init__(parent)
+        self.setWindowTitle("Economia")
+        self.setGeometry(100, 100, 1200, 500)
+
+        self.layout = QVBoxLayout(self)
+
+        # Usa QStandardItemModel per la tabella economica
+        self.economy_model = QStandardItemModel(0, 13)  # 12 mesi + Totale
+        self.economy_model.setHorizontalHeaderLabels([
+            "Settembre", "Ottobre", "Novembre",
+            "Dicembre", "Gennaio", "Febbraio", "Marzo",
+            "Aprile", "Maggio", "Giugno", "Luglio",
+            "Agosto", "Totale assoluto"
+        ])
+
+        self.economy_view = QTableView(self)
+        self.economy_view.setModel(self.economy_model)
+        self.economy_view.setSortingEnabled(True)
+        self.economy_view.horizontalHeader().setFont(QFont("Arial", 12))
+        self.economy_view.setFont(QFont("Arial", 12))
+
+        # Imposta le larghezze delle colonne
+        column_widths = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 120]
+        for i, width in enumerate(column_widths):
+            self.economy_view.setColumnWidth(i, width)
+
+        self.layout.addWidget(self.economy_view)
+
+        # Carica i dati economici
+        self.load_economy_data()
+
+    def load_economy_data(self):
+        conn = sqlite3.connect("studenti.db")
+        cursor = conn.cursor()
+
+        # Calcola il totale per ogni mese
+        month_columns = ["settembre", "ottobre", "novembre", "dicembre", "gennaio",
+                         "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto"]
+
+        totals = {month: 0.0 for month in month_columns}
+
+        for month in month_columns:
+            cursor.execute(f'''
+            SELECT SUM(Costo) FROM Studenti WHERE {month} = 1
+            ''')
+            result = cursor.fetchone()[0]
+            totals[month] = result if result else 0.0
+
+        total = sum(totals.values())
+
+        # Inserisci i dati nella tabella
+        row_data = [f"€ {totals[month]:.2f}" for month in month_columns] + [f"€ {total:.2f}"]
+        self.economy_model.setRowCount(0)  # Clear existing rows
+        row_items = [QStandardItem(data) for data in row_data]
+        self.economy_model.appendRow(row_items)
+
+        conn.close()
+
+
 if __name__ == "__main__":
     try:
-        create_database()
+        #create_database()
 
         app = QApplication(sys.argv)
         window = MainWindow()
@@ -384,6 +465,3 @@ if __name__ == "__main__":
         sys.exit(app.exec_())
     except Exception as e:
         print(f"Si è verificato un errore: {e}")
-
-
-
